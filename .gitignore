@@ -1,0 +1,43 @@
+# Arquivos de configuração sensíveis
+.env
+*.key
+*.pem
+secrets.json
+config.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Outputs gerados
+analise_carreira.json
+relatorio_carreira.txt
+analise_exemplo.json
+*.log
+chat_history/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Sistema
+Thumbs.db
+desktop.ini
+
+# Temporários
+*.tmp
+*.bak
+*.old
