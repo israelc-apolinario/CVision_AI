@@ -215,7 +215,7 @@ Retorne APENAS JSON válido (sem markdown, sem comentários):
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.7,
-                "maxOutputTokens": 4096
+                "maxOutputTokens": 8192
             }
         }
         
@@ -257,12 +257,22 @@ Retorne APENAS JSON válido (sem markdown, sem comentários):
             text = result['candidates'][0]['content']['parts'][0]['text']
             logger.info(f"Texto recebido (primeiros 200 chars): {text[:200]}")
             
-            # Limpar markdown se houver
+            # Limpar markdown de forma mais robusta
             text = text.strip()
-            if text.startswith('```'):
+            
+            # Remover blocos de código markdown
+            if '```json' in text:
+                # Extrair apenas o conteúdo entre ```json e ```
+                start_idx = text.find('```json') + 7
+                end_idx = text.rfind('```')
+                if start_idx > 6 and end_idx > start_idx:
+                    text = text[start_idx:end_idx].strip()
+            elif text.startswith('```'):
+                # Fallback para ``` genérico
                 lines = text.split('\n')
-                text = '\n'.join(lines[1:-1]) if len(lines) > 2 else text
-            text = text.replace('```json', '').replace('```', '').strip()
+                if len(lines) > 2:
+                    text = '\n'.join(lines[1:-1])
+                text = text.replace('```', '').strip()
             
             try:
                 roadmap_data = json.loads(text)
@@ -270,8 +280,8 @@ Retorne APENAS JSON válido (sem markdown, sem comentários):
                 return roadmap_data
             except json.JSONDecodeError as json_error:
                 logger.error(f"Erro ao decodificar JSON do roadmap: {json_error}")
-                logger.error(f"Texto que causou erro: {text[:500]}")
-                st.error(f"❌ Erro ao processar resposta da API. JSON inválido.")
+                logger.error(f"Texto completo que causou erro: {text}")
+                st.error(f"❌ Erro ao processar resposta da API. A resposta pode ter sido truncada. Tente um objetivo mais simples ou específico.")
                 return None
         else:
             error_msg = f"Erro na API ao gerar roadmap: {response.status_code}"
