@@ -134,7 +134,7 @@ def create_senioridade_bar(nivel, anos):
     
     fig.update_layout(
         xaxis=dict(title="", color='#fafafa'),
-        yaxis=dict(title="Expertise (%)", color='#fafafa', range=[0, 110]),
+        yaxis=dict(title="Maturidade Profissional (%)", color='#fafafa', range=[0, 110]),
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
         font=dict(color='#fafafa', family='monospace'),
@@ -147,30 +147,68 @@ def create_senioridade_bar(nivel, anos):
 def generate_career_roadmap(curriculo, career_goal, api_key):
     try:
         agent = CareerIntelligenceAgent(api_key=api_key)
+        logger.info(f"Gerando roadmap para objetivo: {career_goal}")
         
-        prompt = f"""Com base neste currículo e no objetivo de carreira, crie um roadmap detalhado.
+        prompt = f"""Você é um consultor executivo de carreira altamente experiente, especializado em transições profissionais estratégicas e desenvolvimento de liderança.
 
-CURRÍCULO:
+ANÁLISE SOLICITADA:
+Avalie a viabilidade de transição do perfil profissional abaixo para o objetivo de carreira definido. Crie um roadmap estratégico, realista e acionável.
+
+CURRÍCULO DO PROFISSIONAL:
 {curriculo[:3000]}
 
-OBJETIVO DE CARREIRA: {career_goal}
+OBJETIVO DE CARREIRA DESEJADO: {career_goal}
 
-Retorne JSON com:
+DIRETRIZES PARA ANÁLISE PROFISSIONAL:
+1. Seja honesto sobre a viabilidade do objetivo considerando o perfil atual
+2. Defina prazos realistas baseados em transições de mercado
+3. Priorize ações de alto impacto que acelerem a transição
+4. Sugira certificações e cursos reconhecidos pelo mercado
+5. Inclua desenvolvimento de soft skills críticas para o cargo alvo
+6. Considere networking estratégico e visibilidade profissional
+7. Identifique possíveis cargos intermediários se necessário
+
+Retorne APENAS JSON válido (sem markdown, sem comentários):
 {{
-    "objetivo_viavel": true/false,
-    "prazo_estimado": "tempo realista",
+    "objetivo_viavel": true,
+    "prazo_estimado": "18-24 meses",
+    "nivel_desafio": "médio",
     "etapas": [
         {{
             "ordem": 1,
-            "titulo": "título da etapa",
-            "prazo": "3-6 meses",
-            "acoes": ["ação específica"],
-            "skills_desenvolver": ["skill"],
-            "recursos": ["curso/certificação"]
+            "titulo": "Fundação Técnica e Posicionamento",
+            "prazo": "4-6 meses",
+            "acoes": [
+                "Completar certificação X reconhecida no mercado",
+                "Desenvolver projeto demonstrativo em Y",
+                "Iniciar networking estratégico com profissionais da área"
+            ],
+            "skills_desenvolver": [
+                "Skill técnica específica 1",
+                "Skill técnica específica 2", 
+                "Soft skill relevante"
+            ],
+            "recursos": [
+                "Certificação profissional reconhecida (ex: AWS, Azure, PMP)",
+                "Curso estruturado de plataforma respeitada",
+                "Comunidade ou grupo profissional específico"
+            ],
+            "indicadores_sucesso": [
+                "Certificação obtida",
+                "Portfolio com 3+ projetos relevantes",
+                "Rede de 50+ conexões estratégicas"
+            ]
         }}
     ],
-    "probabilidade_sucesso": "alta/média/baixa",
-    "observacoes": "análise crítica e honesta"
+    "cargos_intermediarios": ["Cargo de transição 1", "Cargo de transição 2"],
+    "investimento_estimado": "R$ X.XXX - investimento em cursos, certificações e networking",
+    "probabilidade_sucesso": "alta",
+    "fatores_criticos": [
+        "Dedicação de X horas semanais para desenvolvimento",
+        "Investimento em certificações chave",
+        "Networking ativo e consistente"
+    ],
+    "observacoes": "Análise estratégica considerando tendências de mercado, demanda por perfil e competitividade. Inclua insights sobre o momento ideal para transição e possíveis desafios."
 }}"""
 
         payload = {
@@ -183,6 +221,8 @@ Retorne JSON com:
         
         headers = {"Content-Type": "application/json"}
         import requests
+        
+        logger.info("Fazendo requisição para API do Gemini...")
         response = requests.post(
             f"{agent.api_url}?key={api_key}",
             headers=headers,
@@ -191,10 +231,12 @@ Retorne JSON com:
         )
         
         if response.status_code == 429:
+            logger.warning("Rate limit atingido, tentando modelos alternativos...")
             fallback_models = ["gemini-1.5-flash-latest", "gemini-pro"]
             for model in fallback_models:
                 try:
                     fallback_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+                    logger.info(f"Tentando modelo: {model}")
                     response = requests.post(
                         f"{fallback_url}?key={api_key}",
                         headers=headers,
@@ -202,13 +244,18 @@ Retorne JSON com:
                         timeout=120
                     )
                     if response.status_code == 200:
+                        logger.info(f"Sucesso com modelo: {model}")
                         break
-                except:
+                except Exception as fallback_error:
+                    logger.error(f"Erro no modelo {model}: {fallback_error}")
                     continue
         
         if response.status_code == 200:
             result = response.json()
+            logger.info("Resposta recebida com sucesso")
+            
             text = result['candidates'][0]['content']['parts'][0]['text']
+            logger.info(f"Texto recebido (primeiros 200 chars): {text[:200]}")
             
             # Limpar markdown se houver
             text = text.strip()
@@ -218,16 +265,27 @@ Retorne JSON com:
             text = text.replace('```json', '').replace('```', '').strip()
             
             try:
-                return json.loads(text)
-            except json.JSONDecodeError:
-                logger.error(f"Erro ao decodificar JSON do roadmap")
+                roadmap_data = json.loads(text)
+                logger.info("JSON parseado com sucesso")
+                return roadmap_data
+            except json.JSONDecodeError as json_error:
+                logger.error(f"Erro ao decodificar JSON do roadmap: {json_error}")
+                logger.error(f"Texto que causou erro: {text[:500]}")
+                st.error(f"❌ Erro ao processar resposta da API. JSON inválido.")
                 return None
         else:
-            logger.error(f"Erro na API ao gerar roadmap: {response.status_code}")
+            error_msg = f"Erro na API ao gerar roadmap: {response.status_code}"
+            if response.text:
+                error_msg += f" - {response.text[:200]}"
+            logger.error(error_msg)
+            st.error(f"❌ Erro na API: Status {response.status_code}")
             return None
             
     except Exception as e:
-        logger.error(f"Erro ao gerar roadmap: {e}")
+        logger.error(f"Erro ao gerar roadmap: {type(e).__name__} - {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        st.error(f"❌ Erro: {str(e)}")
         return None
 
 st.markdown("""
@@ -486,42 +544,112 @@ else:
         else:
             roadmap = st.session_state.roadmap
             
-            col_a, col_b = st.columns([2, 1])
+            # Métricas principais
+            col1, col2, col3 = st.columns(3)
             
-            with col_a:
+            with col1:
                 viavel = roadmap.get('objetivo_viavel', True)
-                if viavel:
-                    st.success(f"✅ Objetivo viável em **{roadmap.get('prazo_estimado', 'N/A')}**")
-                else:
-                    st.warning("⚠️ Objetivo requer preparação significativa")
-                
-                prob = roadmap.get('probabilidade_sucesso', 'média')
-                color = '#00ffaa' if prob == 'alta' else '#ffaa00' if prob == 'média' else '#ff6b6b'
-                st.markdown(f"**Probabilidade de sucesso:** <span style='color: {color};'>{prob.upper()}</span>", unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='stat-label'>Viabilidade</div>
+                    <div class='stat-value' style='font-size: 24px;'>{'✓ VIÁVEL' if viavel else '⚠ DESAFIADOR'}</div>
+                    <div style='color: #8b92a7; margin-top: 8px;'>{roadmap.get('prazo_estimado', 'N/A')}</div>
+                </div>
+                """, unsafe_allow_html=True)
             
-            with col_b:
-                if st.button("🔄 Mudar Objetivo"):
+            with col2:
+                prob = roadmap.get('probabilidade_sucesso', 'média')
+                prob_percent = {'alta': '75-90%', 'média': '50-70%', 'baixa': '20-40%'}
+                color = '#00ffaa' if prob == 'alta' else '#ffaa00' if prob == 'média' else '#ff6b6b'
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='stat-label'>Probabilidade de Sucesso</div>
+                    <div class='stat-value' style='font-size: 24px; color: {color};'>{prob.upper()}</div>
+                    <div style='color: #8b92a7; margin-top: 8px;'>{prob_percent.get(prob, 'N/A')}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col3:
+                nivel = roadmap.get('nivel_desafio', 'médio')
+                nivel_color = '#ffaa00' if nivel == 'médio' else '#ff6b6b' if nivel == 'alto' else '#00ffaa'
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='stat-label'>Nível de Desafio</div>
+                    <div class='stat-value' style='font-size: 24px; color: {nivel_color};'>{nivel.upper()}</div>
+                    <div style='color: #8b92a7; margin-top: 8px;'>{roadmap.get('investimento_estimado', 'Consulte detalhes')}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Botão de mudança de objetivo
+            col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
+            with col_btn2:
+                if st.button("🔄 Mudar Objetivo", use_container_width=True):
                     st.session_state.career_goal = None
                     st.session_state.roadmap = None
                     st.rerun()
             
-            st.markdown("### 🗺️ Seu Roadmap Personalizado")
+            st.markdown("---")
+            
+            # Cargos intermediários se existirem
+            cargos_inter = roadmap.get('cargos_intermediarios', [])
+            if cargos_inter:
+                st.markdown("#### 🎯 Cargos Intermediários Recomendados")
+                st.markdown("Para facilitar a transição, considere estas posições estratégicas:")
+                for i, cargo in enumerate(cargos_inter, 1):
+                    st.markdown(f"{i}. **{cargo}**")
+                st.markdown("---")
+            
+            st.markdown("### 🗺️ Roadmap Estratégico de Desenvolvimento")
             
             etapas = roadmap.get('etapas', [])
-            for etapa in etapas:
-                with st.expander(f"**Etapa {etapa.get('ordem')}:** {etapa.get('titulo')} ({etapa.get('prazo')})"):
-                    st.markdown("**Ações:**")
-                    for acao in etapa.get('acoes', []):
-                        st.markdown(f"- {acao}")
+            if not etapas:
+                st.warning("⚠️ Nenhuma etapa foi gerada no roadmap")
+            else:
+                for etapa in etapas:
+                    ordem = etapa.get('ordem', '?')
+                    titulo = etapa.get('titulo', 'Etapa sem título')
+                    prazo = etapa.get('prazo', 'Prazo não definido')
                     
-                    st.markdown("**Skills a Desenvolver:**")
-                    for skill in etapa.get('skills_desenvolver', []):
-                        st.markdown(f"- `{skill}`")
-                    
-                    st.markdown("**Recursos Recomendados:**")
-                    for recurso in etapa.get('recursos', []):
-                        st.markdown(f"- {recurso}")
+                    with st.expander(f"**Etapa {ordem}:** {titulo} ({prazo})", expanded=(ordem == 1)):
+                        acoes = etapa.get('acoes', [])
+                        if acoes:
+                            st.markdown("**🎯 Ações Estratégicas:**")
+                            for acao in acoes:
+                                st.markdown(f"• {acao}")
+                            st.markdown("")
+                        
+                        skills = etapa.get('skills_desenvolver', [])
+                        if skills:
+                            st.markdown("**💡 Skills a Desenvolver:**")
+                            cols = st.columns(min(len(skills), 3))
+                            for i, skill in enumerate(skills):
+                                with cols[i % len(cols)]:
+                                    st.markdown(f"`{skill}`")
+                            st.markdown("")
+                        
+                        recursos = etapa.get('recursos', [])
+                        if recursos:
+                            st.markdown("**📚 Recursos Recomendados:**")
+                            for recurso in recursos:
+                                st.markdown(f"• {recurso}")
+                            st.markdown("")
+                        
+                        indicadores = etapa.get('indicadores_sucesso', [])
+                        if indicadores:
+                            st.markdown("**✅ Indicadores de Sucesso:**")
+                            for indicador in indicadores:
+                                st.markdown(f"☑️ {indicador}")
             
+            # Fatores críticos
+            fatores = roadmap.get('fatores_criticos', [])
+            if fatores:
+                st.markdown("---")
+                st.markdown("### ⚡ Fatores Críticos de Sucesso")
+                for fator in fatores:
+                    st.warning(f"🔑 {fator}")
+            
+            # Observações estratégicas
             if roadmap.get('observacoes'):
                 st.markdown("---")
-                st.info(f"💡 **Observações:** {roadmap.get('observacoes')}")
+                st.markdown("### 💼 Análise Estratégica")
+                st.info(roadmap.get('observacoes'))

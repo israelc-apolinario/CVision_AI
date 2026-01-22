@@ -359,4 +359,4 @@ if __name__ == "__main__":
         
     except ValueError as e:
         print(f"\n⚠️  {e}")
-        print("Configure a variável de ambiente OPENAI_API_KEY ou passe a chave no construtor.")
+        print("Configure a variável de ambiente GOOGLE_API_KEY ou passe a chave no construtor.")
